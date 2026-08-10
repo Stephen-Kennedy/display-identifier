@@ -85,6 +85,41 @@ scripts/stop.sh
 
 Or quit from the `Displays` menu bar item.
 
+## Alfred Commands
+
+These work well as Alfred workflow keywords or terminal/shell actions after the
+repo is cloned to `~/Developer/display-identifier`.
+
+Start:
+
+```sh
+cd "$HOME/Developer/display-identifier" && scripts/launch-persistent.sh --opacity 0.20
+```
+
+Stop:
+
+```sh
+cd "$HOME/Developer/display-identifier" && scripts/stop.sh
+```
+
+Restart:
+
+```sh
+cd "$HOME/Developer/display-identifier" && scripts/restart.sh --opacity 0.20
+```
+
+Open installed app:
+
+```sh
+open "$HOME/Applications/Display Identifier.app"
+```
+
+Update and reinstall:
+
+```sh
+cd "$HOME/Developer/display-identifier" && git pull && scripts/install-app.sh
+```
+
 ## Menu Controls
 
 While Display Identifier is running, macOS shows a `Displays` item in the menu
