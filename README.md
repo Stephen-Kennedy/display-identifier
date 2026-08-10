@@ -21,19 +21,22 @@ swift run display-identify
 
 Small click-through badges appear near the upper-left corner of every display.
 They close automatically after 60 seconds. You can also press `Esc` or `q`.
+Use `--persist` to keep them visible until you quit them.
 
 ## Options
 
 ```sh
 swift run display-identify --duration 20
-swift run display-identify --persistent
+swift run display-identify --persist
+swift run display-identify --list
 swift run display-identify --sort-geometry
 swift run display-identify --center
 ```
 
 Default numbering follows `NSScreen.screens`, which is the order macOS reports
 to apps. `--sort-geometry` numbers screens left-to-right, then top-to-bottom.
-`--center` uses the original large centered overlay style.
+`--list` prints the displays the app can see and exits. `--center` uses the
+original large centered overlay style.
 
 ## Build
 

@@ -6,6 +6,7 @@ struct Options {
     var persistent = false
     var sortByGeometry = false
     var centerOverlay = false
+    var listDisplays = false
 
     static func parse(_ arguments: [String]) -> Options {
         var options = Options()
@@ -14,8 +15,10 @@ struct Options {
         while index < arguments.count {
             let argument = arguments[index]
             switch argument {
-            case "--persistent", "-p":
+            case "--persist", "--persistent", "-p":
                 options.persistent = true
+            case "--list":
+                options.listDisplays = true
             case "--sort-geometry":
                 options.sortByGeometry = true
             case "--center":
@@ -35,7 +38,9 @@ struct Options {
 
                 Options:
                   -d, --duration <seconds>   Auto-close after this many seconds. Default: 60
-                  -p, --persistent           Stay open until Esc or q
+                  -p, --persist              Stay open until Esc or q
+                      --persistent           Alias for --persist
+                      --list                 Print detected displays and exit
                       --sort-geometry        Number screens left-to-right, then top-to-bottom
                       --center               Use the original large centered overlay
                   -h, --help                 Show this help
@@ -49,6 +54,16 @@ struct Options {
         }
 
         return options
+    }
+}
+
+final class OverlayPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        false
+    }
+
+    override var canBecomeMain: Bool {
+        false
     }
 }
 
@@ -104,11 +119,11 @@ final class OverlayView: NSView {
     private func drawBadge() {
         let panelRect = bounds.insetBy(dx: 4, dy: 4)
         let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 18, yRadius: 18)
-        NSColor.black.withAlphaComponent(0.76).setFill()
+        NSColor.black.withAlphaComponent(0.44).setFill()
         panelPath.fill()
 
-        accentColor.withAlphaComponent(0.96).setStroke()
-        panelPath.lineWidth = 5
+        accentColor.withAlphaComponent(0.68).setStroke()
+        panelPath.lineWidth = 4
         panelPath.stroke()
 
         let numberAttributes: [NSAttributedString.Key: Any] = [
@@ -124,7 +139,7 @@ final class OverlayView: NSView {
 
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.82)
+            .foregroundColor: NSColor.white.withAlphaComponent(0.68)
         ]
         let titleString = compactTitle(title) as NSString
         let titleSize = titleString.size(withAttributes: titleAttributes)
@@ -145,10 +160,10 @@ final class OverlayView: NSView {
         )
 
         let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 28, yRadius: 28)
-        NSColor.black.withAlphaComponent(0.72).setFill()
+        NSColor.black.withAlphaComponent(0.58).setFill()
         panelPath.fill()
 
-        accentColor.withAlphaComponent(0.95).setStroke()
+        accentColor.withAlphaComponent(0.78).setStroke()
         panelPath.lineWidth = 8
         panelPath.stroke()
 
@@ -210,6 +225,13 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+
+        if options.listDisplays {
+            printDisplayList()
+            NSApp.terminate(nil)
+            return
+        }
+
         NSApp.activate(ignoringOtherApps: true)
         showOverlays()
         installKeyMonitor()
@@ -242,9 +264,9 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             ].compactMap { $0 }.joined(separator: " | ")
 
             let contentRect = options.centerOverlay ? screen.frame : badgeRect(for: screen)
-            let window = NSWindow(
+            let window = OverlayPanel(
                 contentRect: contentRect,
-                styleMask: [.borderless],
+                styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false,
                 screen: screen
@@ -253,8 +275,14 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.hasShadow = false
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+            window.collectionBehavior = [
+                .canJoinAllSpaces,
+                .fullScreenAuxiliary,
+                .ignoresCycle,
+                .stationary
+            ]
             window.ignoresMouseEvents = !options.centerOverlay
+            window.isReleasedWhenClosed = false
 
             let view = OverlayView(
                 frame: NSRect(origin: .zero, size: contentRect.size),
@@ -266,6 +294,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             )
             view.closeHandler = { NSApp.terminate(nil) }
             window.contentView = view
+            window.setFrame(contentRect, display: true)
             window.orderFrontRegardless()
             windows.append(window)
         }
@@ -294,6 +323,25 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
                 return lhs.frame.minY > rhs.frame.minY
             }
             return lhs.frame.minX < rhs.frame.minX
+        }
+    }
+
+    private func printDisplayList() {
+        let screens = orderedScreens()
+        print("Detected \(screens.count) display\(screens.count == 1 ? "" : "s")")
+
+        for (index, screen) in screens.enumerated() {
+            let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+            let frame = screen.frame
+            let visibleFrame = screen.visibleFrame
+            let mainMarker = screen == NSScreen.main ? " main" : ""
+
+            print("""
+            \(index + 1). \(screen.localizedName)\(mainMarker)
+               id: \(displayID.map(String.init) ?? "unknown")
+               frame: x=\(Int(frame.minX)) y=\(Int(frame.minY)) w=\(Int(frame.width)) h=\(Int(frame.height))
+               visible: x=\(Int(visibleFrame.minX)) y=\(Int(visibleFrame.minY)) w=\(Int(visibleFrame.width)) h=\(Int(visibleFrame.height))
+            """)
         }
     }
 
