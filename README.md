@@ -19,8 +19,8 @@ cd /Users/stephenkennedy/.openclaw/workspace/products/display-identifier
 swift run display-identify
 ```
 
-The overlays close automatically after 10 seconds. You can also press `Esc`,
-press `q`, or click any overlay.
+Small click-through badges appear near the upper-left corner of every display.
+They close automatically after 60 seconds. You can also press `Esc` or `q`.
 
 ## Options
 
@@ -28,10 +28,12 @@ press `q`, or click any overlay.
 swift run display-identify --duration 20
 swift run display-identify --persistent
 swift run display-identify --sort-geometry
+swift run display-identify --center
 ```
 
 Default numbering follows `NSScreen.screens`, which is the order macOS reports
 to apps. `--sort-geometry` numbers screens left-to-right, then top-to-bottom.
+`--center` uses the original large centered overlay style.
 
 ## Build
 
