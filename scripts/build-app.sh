@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Display Identifier"
 APP_DIR="$ROOT_DIR/dist/$APP_NAME.app"
 EXECUTABLE="$APP_DIR/Contents/MacOS/display-identify"
+APP_VERSION="$(awk -F'"' '/let appVersion/ { print $2; exit }' "$ROOT_DIR/Sources/DisplayIdentifier/main.swift")"
 
 cd "$ROOT_DIR"
 swift build -c release
@@ -32,7 +33,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>APP_VERSION_PLACEHOLDER</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSMinimumSystemVersion</key>
@@ -42,5 +43,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+perl -0pi -e "s/APP_VERSION_PLACEHOLDER/$APP_VERSION/g" "$APP_DIR/Contents/Info.plist"
 
 echo "$APP_DIR"

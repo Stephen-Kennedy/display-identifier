@@ -39,6 +39,9 @@ struct Options {
                     options.duration = seconds
                     index += 1
                 }
+            case "--version":
+                print(appVersion)
+                exit(0)
             case "--help", "-h":
                 print("""
                 display-identify
@@ -54,6 +57,7 @@ struct Options {
                       --list                 Print detected displays and exit
                       --sort-geometry        Number screens left-to-right, then top-to-bottom
                       --center               Use the original large centered overlay
+                      --version              Print version and exit
                   -h, --help                 Show this help
                 """)
                 exit(0)

@@ -1,71 +1,104 @@
 # Display Identifier
 
-Tiny macOS helper for showing a big display number on every connected screen.
-It is useful when the MacBook, external monitors, and Sidecar/iPad displays
-make it hard to tell which screen macOS is treating as which.
+Display Identifier is a small macOS menu bar utility that shows numbered,
+click-through badges on every connected display.
+
+It is built for MacBook desks with external monitors, Sidecar/iPad displays, or
+rotating screen layouts where it is easy to lose track of which display macOS is
+treating as `1`, `2`, `3`, and where each screen sits physically.
+
+Badges can show labels like:
+
+```text
+1 CENTER
+2 RIGHT
+3 LEFT
+```
+
+## Requirements
+
+- macOS 13 or later
+- Swift 6 toolchain / Xcode command line tools
 
 ## Clone
 
+Keep the source somewhere stable, not in Downloads. A good default is:
+
 ```sh
+mkdir -p ~/Developer
+cd ~/Developer
 git clone https://github.com/Stephen-Kennedy/display-identifier.git
 cd display-identifier
-swift run display-identify
+```
+
+## Install For Regular Use
+
+Build and install the app into `~/Applications`:
+
+```sh
+scripts/install-app.sh
+open "$HOME/Applications/Display Identifier.app"
+```
+
+`~/Developer/display-identifier` is the source repo you update with `git pull`.
+`~/Applications/Display Identifier.app` is the regular app you open.
+
+To update later:
+
+```sh
+cd ~/Developer/display-identifier
+git pull
+scripts/install-app.sh
+open "$HOME/Applications/Display Identifier.app"
 ```
 
 ## Run From Source
 
+For a quick 60-second display check:
+
 ```sh
-cd /Users/stephenkennedy/.openclaw/workspace/products/display-identifier
 swift run display-identify
 ```
 
-Small click-through badges appear near the upper-left corner of every display.
-They close automatically after 60 seconds. Use `--persist` to keep them visible
-until you quit them.
-
-While the badges are visible, a `Displays` menu appears in the macOS menu bar.
-Use it to adjust opacity, open settings, show or hide badges, refresh displays,
-or quit the overlay cleanly. The Settings window activates the utility and comes
-forward over other apps when selected from the menu bar.
-
-If the menu only shows `Opacity` and `Quit`, an older background copy is still
-running. Pull the latest version and restart it:
+For persistent badges that stay up until you quit:
 
 ```sh
-git pull
-scripts/stop.sh
+swift run display-identify --persist --opacity 0.20
+```
+
+## Run Without Holding Terminal
+
+Start persistent mode in the background:
+
+```sh
 scripts/launch-persistent.sh --opacity 0.20
 ```
 
-`scripts/stop.sh` stops older copies launched through the persistent launcher,
-`swift run display-identify`, or the double-clickable app bundle.
+That script stops older running copies, rebuilds the release binary, and starts a
+fresh background copy.
 
-The current menu starts with `Display Identifier 1.1.0`, followed by
-`Settings...`, `Show Badges`, `Hide Badges`, and `Refresh Displays`.
-
-Each badge shows the macOS display number plus the display's physical position
-relative to the main display. For example, `1 CENTER`, `2 RIGHT`, and `3 LEFT`
-means macOS reports display 1 first, while the right/left labels show how the
-screens are arranged in space.
-
-## Run Without Holding The Terminal
-
-For a persistent overlay that returns control to your shell:
+Stop it from Terminal:
 
 ```sh
-chmod +x scripts/launch-persistent.sh
-scripts/launch-persistent.sh
-```
-
-The launcher stops any older Display Identifier copy before starting the freshly
-built one.
-
-Quit from the `Displays` menu bar item, or run:
-
-```sh
-chmod +x scripts/stop.sh
 scripts/stop.sh
 ```
+
+Or quit from the `Displays` menu bar item.
+
+## Menu Controls
+
+While Display Identifier is running, macOS shows a `Displays` item in the menu
+bar. It includes:
+
+- `Settings...`
+- `Show Badges`
+- `Hide Badges`
+- `Refresh Displays`
+- opacity slider
+- `Quit`
+
+The Settings window comes forward over other apps when opened from the menu.
+The badges themselves stay passive and click-through so they do not steal focus.
 
 ## Options
 
@@ -76,31 +109,68 @@ swift run display-identify --persist --opacity 0.20
 swift run display-identify --list
 swift run display-identify --sort-geometry
 swift run display-identify --center
+swift run display-identify --version
 ```
+
+Options:
+
+- `--duration <seconds>`: auto-close after this many seconds. Default: `60`.
+- `--persist`: stay open until quit from the menu bar or `scripts/stop.sh`.
+- `--persistent`: alias for `--persist`.
+- `--opacity <0.08-0.90>`: badge background opacity. Lower is more transparent.
+- `--alpha <0.08-0.90>`: alias for `--opacity`.
+- `--list`: print detected displays and exit.
+- `--sort-geometry`: number screens left-to-right, then top-to-bottom.
+- `--center`: use the original large centered overlay style.
+- `--version`: print the app version and exit.
 
 Default numbering follows `NSScreen.screens`, which is the order macOS reports
-to apps. `--sort-geometry` numbers screens left-to-right, then top-to-bottom.
-`--list` prints the displays the app can see and exits. `--center` uses the
-original large centered overlay style. `--opacity` accepts values from `0.08`
-to `0.90`; lower values are more transparent.
+to apps. Position labels such as `LEFT`, `CENTER`, and `RIGHT` are based on each
+screen's geometry relative to the main display.
 
-## Future GUI Direction
+## Troubleshooting
 
-The app now has a basic menu bar control and Settings window. A future polish
-pass could make this a packaged login item with saved preferences, a custom menu
-bar icon, and a normal macOS Preferences panel.
-
-## Build
+If the menu is missing newer options, an older copy is probably still running:
 
 ```sh
-swift build -c release
-.build/release/display-identify
+scripts/stop.sh
+scripts/launch-persistent.sh --opacity 0.20
 ```
+
+If Display Identifier only shows one display, check what macOS is reporting:
+
+```sh
+swift run display-identify --list
+```
+
+If `--list` only prints one display, macOS is only exposing one display to the
+app at that moment. Check System Settings > Displays and reconnect Sidecar or
+external monitors.
 
 ## Build A Double-Clickable App
 
 ```sh
-chmod +x scripts/build-app.sh
 scripts/build-app.sh
 open "dist/Display Identifier.app"
 ```
+
+## Uninstall
+
+```sh
+scripts/uninstall-app.sh
+```
+
+This moves `~/Applications/Display Identifier.app` to the Trash when possible.
+
+## Development
+
+```sh
+swift build -c release
+.build/release/display-identify --help
+.build/release/display-identify --version
+```
+
+## License
+
+No license has been selected yet. Until a license is added, the repository is
+publicly visible but not explicitly open-source licensed.
