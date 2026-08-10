@@ -172,5 +172,4 @@ swift build -c release
 
 ## License
 
-No license has been selected yet. Until a license is added, the repository is
-publicly visible but not explicitly open-source licensed.
+MIT License. See [LICENSE](LICENSE).
