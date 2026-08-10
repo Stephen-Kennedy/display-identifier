@@ -20,8 +20,11 @@ swift run display-identify
 ```
 
 Small click-through badges appear near the upper-left corner of every display.
-They close automatically after 60 seconds. You can also press `Esc` or `q`.
-Use `--persist` to keep them visible until you quit them.
+They close automatically after 60 seconds. Use `--persist` to keep them visible
+until you quit them.
+
+While the badges are visible, a `Displays` menu appears in the menu bar. Use it
+to adjust opacity or quit the overlay cleanly.
 
 Each badge shows the macOS display number plus the display's physical position
 relative to the main display. For example, `1 CENTER`, `2 RIGHT`, and `3 LEFT`
@@ -37,13 +40,19 @@ chmod +x scripts/launch-persistent.sh
 scripts/launch-persistent.sh
 ```
 
-Quit the badges with `Esc` or `q`.
+Quit from the `Displays` menu bar item, or run:
+
+```sh
+chmod +x scripts/stop.sh
+scripts/stop.sh
+```
 
 ## Options
 
 ```sh
 swift run display-identify --duration 20
 swift run display-identify --persist
+swift run display-identify --persist --opacity 0.20
 swift run display-identify --list
 swift run display-identify --sort-geometry
 swift run display-identify --center
@@ -52,13 +61,14 @@ swift run display-identify --center
 Default numbering follows `NSScreen.screens`, which is the order macOS reports
 to apps. `--sort-geometry` numbers screens left-to-right, then top-to-bottom.
 `--list` prints the displays the app can see and exits. `--center` uses the
-original large centered overlay style.
+original large centered overlay style. `--opacity` accepts values from `0.08`
+to `0.90`; lower values are more transparent.
 
 ## Future GUI Direction
 
-The natural next step is a small menu bar app with commands like `Show for 60s`,
-`Show Persistently`, `Hide`, and `Quit`. That would make it usable without
-Terminal while keeping the overlays lightweight and click-through.
+The app now has a basic menu bar control for opacity and Quit. The natural next
+step is a fuller menu bar app with commands like `Show for 60s`, `Show
+Persistently`, `Hide`, `Refresh Displays`, and `Quit`.
 
 ## Build
 

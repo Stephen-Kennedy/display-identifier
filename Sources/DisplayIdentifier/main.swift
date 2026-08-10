@@ -7,6 +7,7 @@ struct Options {
     var sortByGeometry = false
     var centerOverlay = false
     var listDisplays = false
+    var opacity: CGFloat = 0.30
 
     static func parse(_ arguments: [String]) -> Options {
         var options = Options()
@@ -23,6 +24,12 @@ struct Options {
                 options.sortByGeometry = true
             case "--center":
                 options.centerOverlay = true
+            case "--opacity", "--alpha":
+                if index + 1 < arguments.count,
+                   let opacity = Double(arguments[index + 1]) {
+                    options.opacity = CGFloat(min(max(opacity, 0.08), 0.90))
+                    index += 1
+                }
             case "--duration", "-d":
                 if index + 1 < arguments.count,
                    let seconds = TimeInterval(arguments[index + 1]),
@@ -38,8 +45,10 @@ struct Options {
 
                 Options:
                   -d, --duration <seconds>   Auto-close after this many seconds. Default: 60
-                  -p, --persist              Stay open until Esc or q
+                  -p, --persist              Stay open until quit from the menu bar
                       --persistent           Alias for --persist
+                      --opacity <0.08-0.90>  Badge background opacity. Default: 0.30
+                      --alpha <0.08-0.90>    Alias for --opacity
                       --list                 Print detected displays and exit
                       --sort-geometry        Number screens left-to-right, then top-to-bottom
                       --center               Use the original large centered overlay
@@ -74,15 +83,21 @@ final class OverlayView: NSView {
     private let position: String
     private let accentColor: NSColor
     private let isBadge: Bool
+    var opacity: CGFloat {
+        didSet {
+            needsDisplay = true
+        }
+    }
     var closeHandler: (() -> Void)?
 
-    init(frame: NSRect, number: Int, title: String, details: String, position: String, accentColor: NSColor, isBadge: Bool) {
+    init(frame: NSRect, number: Int, title: String, details: String, position: String, accentColor: NSColor, isBadge: Bool, opacity: CGFloat) {
         self.number = number
         self.title = title
         self.details = details
         self.position = position
         self.accentColor = accentColor
         self.isBadge = isBadge
+        self.opacity = opacity
         super.init(frame: frame)
         wantsLayer = true
     }
@@ -121,10 +136,10 @@ final class OverlayView: NSView {
     private func drawBadge() {
         let panelRect = bounds.insetBy(dx: 4, dy: 4)
         let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 14, yRadius: 14)
-        NSColor.black.withAlphaComponent(0.30).setFill()
+        NSColor.black.withAlphaComponent(opacity).setFill()
         panelPath.fill()
 
-        accentColor.withAlphaComponent(0.52).setStroke()
+        accentColor.withAlphaComponent(min(opacity + 0.22, 0.90)).setStroke()
         panelPath.lineWidth = 3
         panelPath.stroke()
 
@@ -182,10 +197,10 @@ final class OverlayView: NSView {
         )
 
         let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 28, yRadius: 28)
-        NSColor.black.withAlphaComponent(0.58).setFill()
+        NSColor.black.withAlphaComponent(max(opacity, 0.18)).setFill()
         panelPath.fill()
 
-        accentColor.withAlphaComponent(0.78).setStroke()
+        accentColor.withAlphaComponent(min(opacity + 0.40, 0.95)).setStroke()
         panelPath.lineWidth = 8
         panelPath.stroke()
 
@@ -238,9 +253,12 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private let options: Options
     private var windows: [NSWindow] = []
     private var globalMonitor: Any?
+    private var statusItem: NSStatusItem?
+    private var opacity: CGFloat
 
     init(options: Options) {
         self.options = options
+        self.opacity = options.opacity
         super.init()
     }
 
@@ -254,6 +272,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         }
 
         NSApp.activate(ignoringOtherApps: true)
+        installStatusMenu()
         showOverlays()
         installKeyMonitor()
 
@@ -314,7 +333,8 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
                 details: details,
                 position: position,
                 accentColor: accentColor(for: index),
-                isBadge: !options.centerOverlay
+                isBadge: !options.centerOverlay,
+                opacity: opacity
             )
             view.closeHandler = { NSApp.terminate(nil) }
             window.contentView = view
@@ -335,6 +355,53 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             width: badgeSize.width,
             height: badgeSize.height
         )
+    }
+
+    private func installStatusMenu() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.title = "Displays"
+
+        let menu = NSMenu()
+        let titleItem = NSMenuItem(title: "Display Identifier", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
+
+        let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
+        slider.frame = NSRect(x: 0, y: 0, width: 180, height: 28)
+
+        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 42))
+        let label = NSTextField(labelWithString: "Opacity")
+        label.frame = NSRect(x: 14, y: 22, width: 80, height: 16)
+        label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        slider.frame = NSRect(x: 14, y: 2, width: 192, height: 24)
+        sliderContainer.addSubview(label)
+        sliderContainer.addSubview(slider)
+
+        let sliderItem = NSMenuItem()
+        sliderItem.view = sliderContainer
+        menu.addItem(sliderItem)
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitFromMenu), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func opacityChanged(_ sender: NSSlider) {
+        opacity = CGFloat(sender.doubleValue)
+
+        for window in windows {
+            if let overlayView = window.contentView as? OverlayView {
+                overlayView.opacity = opacity
+            }
+        }
+    }
+
+    @objc private func quitFromMenu() {
+        NSApp.terminate(nil)
     }
 
     private func orderedScreens() -> [NSScreen] {
