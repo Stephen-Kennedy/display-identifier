@@ -23,8 +23,10 @@ Small click-through badges appear near the upper-left corner of every display.
 They close automatically after 60 seconds. Use `--persist` to keep them visible
 until you quit them.
 
-While the badges are visible, a `Displays` menu appears in the menu bar. Use it
-to adjust opacity or quit the overlay cleanly.
+While the badges are visible, a `Displays` menu appears in the macOS menu bar.
+Use it to adjust opacity, open settings, show or hide badges, refresh displays,
+or quit the overlay cleanly. The Settings window activates the utility and comes
+forward over other apps when selected from the menu bar.
 
 Each badge shows the macOS display number plus the display's physical position
 relative to the main display. For example, `1 CENTER`, `2 RIGHT`, and `3 LEFT`
@@ -66,9 +68,9 @@ to `0.90`; lower values are more transparent.
 
 ## Future GUI Direction
 
-The app now has a basic menu bar control for opacity and Quit. The natural next
-step is a fuller menu bar app with commands like `Show for 60s`, `Show
-Persistently`, `Hide`, `Refresh Displays`, and `Quit`.
+The app now has a basic menu bar control and Settings window. A future polish
+pass could make this a packaged login item with saved preferences, a custom menu
+bar icon, and a normal macOS Preferences panel.
 
 ## Build
 

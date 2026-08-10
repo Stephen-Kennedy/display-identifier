@@ -254,6 +254,9 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private var windows: [NSWindow] = []
     private var globalMonitor: Any?
     private var statusItem: NSStatusItem?
+    private var settingsWindow: NSPanel?
+    private weak var menuOpacitySlider: NSSlider?
+    private weak var settingsOpacitySlider: NSSlider?
     private var opacity: CGFloat
 
     init(options: Options) {
@@ -368,6 +371,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
         let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
         slider.frame = NSRect(x: 0, y: 0, width: 180, height: 28)
+        menuOpacitySlider = slider
 
         let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 42))
         let label = NSTextField(labelWithString: "Opacity")
@@ -382,6 +386,23 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         menu.addItem(sliderItem)
         menu.addItem(.separator())
 
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        let showItem = NSMenuItem(title: "Show Badges", action: #selector(showBadges), keyEquivalent: "")
+        showItem.target = self
+        menu.addItem(showItem)
+
+        let hideItem = NSMenuItem(title: "Hide Badges", action: #selector(hideBadges), keyEquivalent: "")
+        hideItem.target = self
+        menu.addItem(hideItem)
+
+        let refreshItem = NSMenuItem(title: "Refresh Displays", action: #selector(refreshDisplays), keyEquivalent: "r")
+        refreshItem.target = self
+        menu.addItem(refreshItem)
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitFromMenu), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -392,6 +413,8 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     @objc private func opacityChanged(_ sender: NSSlider) {
         opacity = CGFloat(sender.doubleValue)
+        menuOpacitySlider?.doubleValue = Double(opacity)
+        settingsOpacitySlider?.doubleValue = Double(opacity)
 
         for window in windows {
             if let overlayView = window.contentView as? OverlayView {
@@ -400,8 +423,88 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func showSettings() {
+        let window = settingsWindow ?? makeSettingsWindow()
+        settingsWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func showBadges() {
+        if windows.isEmpty {
+            showOverlays()
+        } else {
+            for window in windows {
+                window.orderFrontRegardless()
+            }
+        }
+    }
+
+    @objc private func hideBadges() {
+        for window in windows {
+            window.orderOut(nil)
+        }
+    }
+
+    @objc private func refreshDisplays() {
+        for window in windows {
+            window.close()
+        }
+        windows.removeAll()
+        showOverlays()
+    }
+
     @objc private func quitFromMenu() {
         NSApp.terminate(nil)
+    }
+
+    private func makeSettingsWindow() -> NSPanel {
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 170),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Display Identifier"
+        window.level = .floating
+        window.isReleasedWhenClosed = false
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 170))
+
+        let title = NSTextField(labelWithString: "Display Identifier")
+        title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
+        title.frame = NSRect(x: 20, y: 126, width: 240, height: 24)
+        contentView.addSubview(title)
+
+        let opacityLabel = NSTextField(labelWithString: "Badge opacity")
+        opacityLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        opacityLabel.frame = NSRect(x: 20, y: 92, width: 120, height: 18)
+        contentView.addSubview(opacityLabel)
+
+        let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
+        slider.frame = NSRect(x: 116, y: 88, width: 184, height: 24)
+        settingsOpacitySlider = slider
+        contentView.addSubview(slider)
+
+        let showButton = NSButton(title: "Show", target: self, action: #selector(showBadges))
+        showButton.frame = NSRect(x: 20, y: 34, width: 70, height: 32)
+        contentView.addSubview(showButton)
+
+        let hideButton = NSButton(title: "Hide", target: self, action: #selector(hideBadges))
+        hideButton.frame = NSRect(x: 98, y: 34, width: 70, height: 32)
+        contentView.addSubview(hideButton)
+
+        let refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refreshDisplays))
+        refreshButton.frame = NSRect(x: 176, y: 34, width: 80, height: 32)
+        contentView.addSubview(refreshButton)
+
+        let quitButton = NSButton(title: "Quit", target: self, action: #selector(quitFromMenu))
+        quitButton.frame = NSRect(x: 260, y: 34, width: 46, height: 32)
+        contentView.addSubview(quitButton)
+
+        window.contentView = contentView
+        return window
     }
 
     private func orderedScreens() -> [NSScreen] {
