@@ -1,7 +1,66 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.3.0"
+let appVersion = "1.3.1"
+
+enum ShortcutKey: String, CaseIterable {
+    case none
+    case escape
+    case q
+    case commandShiftD
+
+    var displayName: String {
+        switch self {
+        case .none:
+            return "Off"
+        case .escape:
+            return "Escape"
+        case .q:
+            return "Q"
+        case .commandShiftD:
+            return "Command-Shift-D"
+        }
+    }
+
+    func matches(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting(.capsLock)
+
+        switch self {
+        case .none:
+            return false
+        case .escape:
+            return event.keyCode == 53
+        case .q:
+            return event.charactersIgnoringModifiers?.lowercased() == "q"
+                && flags.isEmpty
+        case .commandShiftD:
+            return event.charactersIgnoringModifiers?.lowercased() == "d"
+                && flags.contains(.command)
+                && flags.contains(.shift)
+                && !flags.contains(.option)
+                && !flags.contains(.control)
+        }
+    }
+}
+
+enum ShortcutAction: String, CaseIterable {
+    case toggleBadges
+    case hideBadges
+    case quit
+
+    var displayName: String {
+        switch self {
+        case .toggleBadges:
+            return "Toggle Badges"
+        case .hideBadges:
+            return "Hide Badges"
+        case .quit:
+            return "Quit App"
+        }
+    }
+}
 
 enum BadgePlacement: String, CaseIterable {
     case topLeft
@@ -167,14 +226,6 @@ final class OverlayView: NSView {
         closeHandler?()
     }
 
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 || event.charactersIgnoringModifiers?.lowercased() == "q" {
-            closeHandler?()
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
     override func draw(_ dirtyRect: NSRect) {
         NSColor.clear.setFill()
         dirtyRect.fill()
@@ -304,6 +355,8 @@ final class OverlayView: NSView {
 @MainActor
 final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private static let badgePlacementDefaultsKey = "BadgePlacement"
+    private static let shortcutKeyDefaultsKey = "ShortcutKey"
+    private static let shortcutActionDefaultsKey = "ShortcutAction"
     private static let defaults = UserDefaults(suiteName: "local.accord.display-identifier") ?? .standard
 
     private let options: Options
@@ -314,8 +367,13 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private weak var menuOpacitySlider: NSSlider?
     private weak var settingsOpacitySlider: NSSlider?
     private weak var settingsPlacementPopUp: NSPopUpButton?
+    private weak var settingsShortcutKeyPopUp: NSPopUpButton?
+    private weak var settingsShortcutActionPopUp: NSPopUpButton?
     private var opacity: CGFloat
     private var badgePlacement: BadgePlacement
+    private var shortcutKey: ShortcutKey
+    private var shortcutAction: ShortcutAction
+    private var overlaysVisible = false
 
     init(options: Options) {
         self.options = options
@@ -327,6 +385,18 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             self.badgePlacement = savedPlacement
         } else {
             self.badgePlacement = .bottomRight
+        }
+        if let savedValue = Self.defaults.string(forKey: Self.shortcutKeyDefaultsKey),
+           let savedShortcutKey = ShortcutKey(rawValue: savedValue) {
+            self.shortcutKey = savedShortcutKey
+        } else {
+            self.shortcutKey = .none
+        }
+        if let savedValue = Self.defaults.string(forKey: Self.shortcutActionDefaultsKey),
+           let savedShortcutAction = ShortcutAction(rawValue: savedValue) {
+            self.shortcutAction = savedShortcutAction
+        } else {
+            self.shortcutAction = .toggleBadges
         }
         super.init()
     }
@@ -411,6 +481,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             window.orderFrontRegardless()
             windows.append(window)
         }
+        overlaysVisible = true
     }
 
     private func badgeRect(for screen: NSScreen) -> NSRect {
@@ -508,6 +579,28 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         refreshDisplays()
     }
 
+    @objc private func shortcutKeyChanged(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let key = ShortcutKey(rawValue: rawValue) else {
+            return
+        }
+
+        shortcutKey = key
+        Self.defaults.set(rawValue, forKey: Self.shortcutKeyDefaultsKey)
+        settingsShortcutKeyPopUp?.selectItem(withTitle: key.displayName)
+    }
+
+    @objc private func shortcutActionChanged(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let action = ShortcutAction(rawValue: rawValue) else {
+            return
+        }
+
+        shortcutAction = action
+        Self.defaults.set(rawValue, forKey: Self.shortcutActionDefaultsKey)
+        settingsShortcutActionPopUp?.selectItem(withTitle: action.displayName)
+    }
+
     @objc private func showSettings() {
         let window = settingsWindow ?? makeSettingsWindow()
         settingsWindow = window
@@ -523,6 +616,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             for window in windows {
                 window.orderFrontRegardless()
             }
+            overlaysVisible = true
         }
     }
 
@@ -530,14 +624,19 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         for window in windows {
             window.orderOut(nil)
         }
+        overlaysVisible = false
     }
 
     @objc private func refreshDisplays() {
+        let shouldRemainVisible = overlaysVisible
         for window in windows {
             window.close()
         }
         windows.removeAll()
         showOverlays()
+        if !shouldRemainVisible {
+            hideBadges()
+        }
     }
 
     @objc private func quitFromMenu() {
@@ -546,7 +645,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func makeSettingsWindow() -> NSPanel {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -555,29 +654,29 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 220))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 300))
 
         let title = NSTextField(labelWithString: "Display Identifier")
         title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        title.frame = NSRect(x: 20, y: 176, width: 260, height: 24)
+        title.frame = NSRect(x: 20, y: 256, width: 260, height: 24)
         contentView.addSubview(title)
 
         let opacityLabel = NSTextField(labelWithString: "Badge opacity")
         opacityLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        opacityLabel.frame = NSRect(x: 20, y: 138, width: 120, height: 18)
+        opacityLabel.frame = NSRect(x: 20, y: 218, width: 120, height: 18)
         contentView.addSubview(opacityLabel)
 
         let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
-        slider.frame = NSRect(x: 126, y: 134, width: 194, height: 24)
+        slider.frame = NSRect(x: 146, y: 214, width: 194, height: 24)
         settingsOpacitySlider = slider
         contentView.addSubview(slider)
 
         let placementLabel = NSTextField(labelWithString: "Badge position")
         placementLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        placementLabel.frame = NSRect(x: 20, y: 98, width: 120, height: 18)
+        placementLabel.frame = NSRect(x: 20, y: 178, width: 120, height: 18)
         contentView.addSubview(placementLabel)
 
-        let placementPopUp = NSPopUpButton(frame: NSRect(x: 126, y: 92, width: 194, height: 28), pullsDown: false)
+        let placementPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 172, width: 194, height: 28), pullsDown: false)
         for placement in BadgePlacement.allCases {
             placementPopUp.addItem(withTitle: placement.displayName)
             placementPopUp.lastItem?.representedObject = placement.rawValue
@@ -587,6 +686,38 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         placementPopUp.action = #selector(badgePlacementChanged(_:))
         settingsPlacementPopUp = placementPopUp
         contentView.addSubview(placementPopUp)
+
+        let shortcutKeyLabel = NSTextField(labelWithString: "Hot key")
+        shortcutKeyLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        shortcutKeyLabel.frame = NSRect(x: 20, y: 138, width: 120, height: 18)
+        contentView.addSubview(shortcutKeyLabel)
+
+        let shortcutKeyPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 132, width: 194, height: 28), pullsDown: false)
+        for key in ShortcutKey.allCases {
+            shortcutKeyPopUp.addItem(withTitle: key.displayName)
+            shortcutKeyPopUp.lastItem?.representedObject = key.rawValue
+        }
+        shortcutKeyPopUp.selectItem(withTitle: shortcutKey.displayName)
+        shortcutKeyPopUp.target = self
+        shortcutKeyPopUp.action = #selector(shortcutKeyChanged(_:))
+        settingsShortcutKeyPopUp = shortcutKeyPopUp
+        contentView.addSubview(shortcutKeyPopUp)
+
+        let shortcutActionLabel = NSTextField(labelWithString: "Hot key action")
+        shortcutActionLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        shortcutActionLabel.frame = NSRect(x: 20, y: 98, width: 120, height: 18)
+        contentView.addSubview(shortcutActionLabel)
+
+        let shortcutActionPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 92, width: 194, height: 28), pullsDown: false)
+        for action in ShortcutAction.allCases {
+            shortcutActionPopUp.addItem(withTitle: action.displayName)
+            shortcutActionPopUp.lastItem?.representedObject = action.rawValue
+        }
+        shortcutActionPopUp.selectItem(withTitle: shortcutAction.displayName)
+        shortcutActionPopUp.target = self
+        shortcutActionPopUp.action = #selector(shortcutActionChanged(_:))
+        settingsShortcutActionPopUp = shortcutActionPopUp
+        contentView.addSubview(shortcutActionPopUp)
 
         let showButton = NSButton(title: "Show", target: self, action: #selector(showBadges))
         showButton.frame = NSRect(x: 20, y: 34, width: 70, height: 32)
@@ -664,8 +795,21 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func installKeyMonitor() {
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 || event.charactersIgnoringModifiers?.lowercased() == "q" {
-                Task { @MainActor in
+            guard self.shortcutKey.matches(event) else {
+                return
+            }
+
+            Task { @MainActor in
+                switch self.shortcutAction {
+                case .toggleBadges:
+                    if self.overlaysVisible {
+                        self.hideBadges()
+                    } else {
+                        self.showBadges()
+                    }
+                case .hideBadges:
+                    self.hideBadges()
+                case .quit:
                     NSApp.terminate(nil)
                 }
             }

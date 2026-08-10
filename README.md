@@ -134,10 +134,14 @@ bar. It includes:
 - `Refresh Displays`
 - opacity slider
 - badge position selector in `Settings...`
+- hot key selector and hot key action selector in `Settings...`
 - `Quit`
 
 The Settings window comes forward over other apps when opened from the menu.
 The badges themselves stay passive and click-through so they do not steal focus.
+The hot key is off by default, so keys like Escape continue to behave normally
+in whatever app you are using. In `Settings...`, you can choose a key and set it
+to toggle badges, hide badges, or quit Display Identifier.
 
 ## Options
 

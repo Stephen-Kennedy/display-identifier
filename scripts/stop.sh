@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PID_FILE="${TMPDIR:-/tmp}display-identifier.pid"
+TMP_ROOT="${TMPDIR:-/tmp}"
+PID_FILE="$TMP_ROOT/display-identifier.pid"
 STOPPED=0
 
 if [[ -f "$PID_FILE" ]]; then
