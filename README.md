@@ -37,6 +37,9 @@ scripts/stop.sh
 scripts/launch-persistent.sh --opacity 0.20
 ```
 
+`scripts/stop.sh` stops older copies launched through the persistent launcher,
+`swift run display-identify`, or the double-clickable app bundle.
+
 The current menu starts with `Display Identifier 1.1.0`, followed by
 `Settings...`, `Show Badges`, `Hide Badges`, and `Refresh Displays`.
 
@@ -54,8 +57,8 @@ chmod +x scripts/launch-persistent.sh
 scripts/launch-persistent.sh
 ```
 
-The launcher stops any older persistent copy before starting the freshly built
-one.
+The launcher stops any older Display Identifier copy before starting the freshly
+built one.
 
 Quit from the `Displays` menu bar item, or run:
 
