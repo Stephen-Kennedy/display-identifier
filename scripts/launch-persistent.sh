@@ -6,6 +6,8 @@ LOG_FILE="${TMPDIR:-/tmp}display-identifier.log"
 PID_FILE="${TMPDIR:-/tmp}display-identifier.pid"
 
 cd "$ROOT_DIR"
+
+"$ROOT_DIR/scripts/stop.sh" >/dev/null || true
 swift build -c release >/dev/null
 
 nohup "$ROOT_DIR/.build/release/display-identify" --persist "$@" >"$LOG_FILE" 2>&1 &

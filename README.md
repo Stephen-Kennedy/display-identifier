@@ -28,6 +28,18 @@ Use it to adjust opacity, open settings, show or hide badges, refresh displays,
 or quit the overlay cleanly. The Settings window activates the utility and comes
 forward over other apps when selected from the menu bar.
 
+If the menu only shows `Opacity` and `Quit`, an older background copy is still
+running. Pull the latest version and restart it:
+
+```sh
+git pull
+scripts/stop.sh
+scripts/launch-persistent.sh --opacity 0.20
+```
+
+The current menu starts with `Display Identifier 1.1.0`, followed by
+`Settings...`, `Show Badges`, `Hide Badges`, and `Refresh Displays`.
+
 Each badge shows the macOS display number plus the display's physical position
 relative to the main display. For example, `1 CENTER`, `2 RIGHT`, and `3 LEFT`
 means macOS reports display 1 first, while the right/left labels show how the
@@ -41,6 +53,9 @@ For a persistent overlay that returns control to your shell:
 chmod +x scripts/launch-persistent.sh
 scripts/launch-persistent.sh
 ```
+
+The launcher stops any older persistent copy before starting the freshly built
+one.
 
 Quit from the `Displays` menu bar item, or run:
 

@@ -1,6 +1,8 @@
 import AppKit
 import CoreGraphics
 
+let appVersion = "1.1.0"
+
 struct Options {
     var duration: TimeInterval = 60
     var persistent = false
@@ -365,26 +367,9 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         item.button?.title = "Displays"
 
         let menu = NSMenu()
-        let titleItem = NSMenuItem(title: "Display Identifier", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: "Display Identifier \(appVersion)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
-
-        let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
-        slider.frame = NSRect(x: 0, y: 0, width: 180, height: 28)
-        menuOpacitySlider = slider
-
-        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 42))
-        let label = NSTextField(labelWithString: "Opacity")
-        label.frame = NSRect(x: 14, y: 22, width: 80, height: 16)
-        label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        slider.frame = NSRect(x: 14, y: 2, width: 192, height: 24)
-        sliderContainer.addSubview(label)
-        sliderContainer.addSubview(slider)
-
-        let sliderItem = NSMenuItem()
-        sliderItem.view = sliderContainer
-        menu.addItem(sliderItem)
-        menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -401,6 +386,23 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         let refreshItem = NSMenuItem(title: "Refresh Displays", action: #selector(refreshDisplays), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
+        menu.addItem(.separator())
+
+        let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
+        slider.frame = NSRect(x: 0, y: 0, width: 180, height: 28)
+        menuOpacitySlider = slider
+
+        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 42))
+        let label = NSTextField(labelWithString: "Opacity")
+        label.frame = NSRect(x: 14, y: 22, width: 80, height: 16)
+        label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        slider.frame = NSRect(x: 14, y: 2, width: 192, height: 24)
+        sliderContainer.addSubview(label)
+        sliderContainer.addSubview(slider)
+
+        let sliderItem = NSMenuItem()
+        sliderItem.view = sliderContainer
+        menu.addItem(sliderItem)
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitFromMenu), keyEquivalent: "q")
