@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.3.1"
+let appVersion = "1.4.0"
 
 enum ShortcutKey: String, CaseIterable {
     case none
@@ -357,6 +357,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private static let badgePlacementDefaultsKey = "BadgePlacement"
     private static let shortcutKeyDefaultsKey = "ShortcutKey"
     private static let shortcutActionDefaultsKey = "ShortcutAction"
+    private static let autoRefreshDefaultsKey = "AutoRefreshOnDisplayChange"
     private static let defaults = UserDefaults(suiteName: "local.accord.display-identifier") ?? .standard
 
     private let options: Options
@@ -369,11 +370,14 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private weak var settingsPlacementPopUp: NSPopUpButton?
     private weak var settingsShortcutKeyPopUp: NSPopUpButton?
     private weak var settingsShortcutActionPopUp: NSPopUpButton?
+    private weak var settingsAutoRefreshButton: NSButton?
     private var opacity: CGFloat
     private var badgePlacement: BadgePlacement
     private var shortcutKey: ShortcutKey
     private var shortcutAction: ShortcutAction
+    private var autoRefreshOnDisplayChange: Bool
     private var overlaysVisible = false
+    private var pendingDisplayRefresh: DispatchWorkItem?
 
     init(options: Options) {
         self.options = options
@@ -398,6 +402,11 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         } else {
             self.shortcutAction = .toggleBadges
         }
+        if Self.defaults.object(forKey: Self.autoRefreshDefaultsKey) == nil {
+            self.autoRefreshOnDisplayChange = true
+        } else {
+            self.autoRefreshOnDisplayChange = Self.defaults.bool(forKey: Self.autoRefreshDefaultsKey)
+        }
         super.init()
     }
 
@@ -414,6 +423,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         installStatusMenu()
         showOverlays()
         installKeyMonitor()
+        installScreenChangeObserver()
 
         if !options.persistent {
             Timer.scheduledTimer(withTimeInterval: options.duration, repeats: false) { _ in
@@ -428,6 +438,8 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         if let globalMonitor {
             NSEvent.removeMonitor(globalMonitor)
         }
+        pendingDisplayRefresh?.cancel()
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func showOverlays() {
@@ -601,6 +613,12 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         settingsShortcutActionPopUp?.selectItem(withTitle: action.displayName)
     }
 
+    @objc private func autoRefreshChanged(_ sender: NSButton) {
+        autoRefreshOnDisplayChange = sender.state == .on
+        Self.defaults.set(autoRefreshOnDisplayChange, forKey: Self.autoRefreshDefaultsKey)
+        settingsAutoRefreshButton?.state = autoRefreshOnDisplayChange ? .on : .off
+    }
+
     @objc private func showSettings() {
         let window = settingsWindow ?? makeSettingsWindow()
         settingsWindow = window
@@ -621,21 +639,29 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func hideBadges() {
-        for window in windows {
-            window.orderOut(nil)
-        }
+        orderOutOverlayWindows()
         overlaysVisible = false
     }
 
     @objc private func refreshDisplays() {
         let shouldRemainVisible = overlaysVisible
+        closeOverlayWindows()
+        if shouldRemainVisible {
+            showOverlays()
+        }
+    }
+
+    private func closeOverlayWindows() {
         for window in windows {
             window.close()
         }
         windows.removeAll()
-        showOverlays()
-        if !shouldRemainVisible {
-            hideBadges()
+        overlaysVisible = false
+    }
+
+    private func orderOutOverlayWindows() {
+        for window in windows {
+            window.orderOut(nil)
         }
     }
 
@@ -643,9 +669,42 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    private func installScreenChangeObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged(_:)),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
+    @objc private func screenParametersChanged(_ notification: Notification) {
+        guard autoRefreshOnDisplayChange else {
+            return
+        }
+
+        let shouldRemainVisible = overlaysVisible
+        closeOverlayWindows()
+        overlaysVisible = shouldRemainVisible
+
+        pendingDisplayRefresh?.cancel()
+        let refresh = DispatchWorkItem { [weak self] in
+            guard let self else {
+                return
+            }
+
+            if self.overlaysVisible {
+                self.closeOverlayWindows()
+                self.showOverlays()
+            }
+        }
+        pendingDisplayRefresh = refresh
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: refresh)
+    }
+
     private func makeSettingsWindow() -> NSPanel {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 334),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -654,29 +713,29 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 300))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 334))
 
         let title = NSTextField(labelWithString: "Display Identifier")
         title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        title.frame = NSRect(x: 20, y: 256, width: 260, height: 24)
+        title.frame = NSRect(x: 20, y: 290, width: 260, height: 24)
         contentView.addSubview(title)
 
         let opacityLabel = NSTextField(labelWithString: "Badge opacity")
         opacityLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        opacityLabel.frame = NSRect(x: 20, y: 218, width: 120, height: 18)
+        opacityLabel.frame = NSRect(x: 20, y: 252, width: 120, height: 18)
         contentView.addSubview(opacityLabel)
 
         let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
-        slider.frame = NSRect(x: 146, y: 214, width: 194, height: 24)
+        slider.frame = NSRect(x: 146, y: 248, width: 194, height: 24)
         settingsOpacitySlider = slider
         contentView.addSubview(slider)
 
         let placementLabel = NSTextField(labelWithString: "Badge position")
         placementLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        placementLabel.frame = NSRect(x: 20, y: 178, width: 120, height: 18)
+        placementLabel.frame = NSRect(x: 20, y: 212, width: 120, height: 18)
         contentView.addSubview(placementLabel)
 
-        let placementPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 172, width: 194, height: 28), pullsDown: false)
+        let placementPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 206, width: 194, height: 28), pullsDown: false)
         for placement in BadgePlacement.allCases {
             placementPopUp.addItem(withTitle: placement.displayName)
             placementPopUp.lastItem?.representedObject = placement.rawValue
@@ -689,10 +748,10 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
         let shortcutKeyLabel = NSTextField(labelWithString: "Hot key")
         shortcutKeyLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        shortcutKeyLabel.frame = NSRect(x: 20, y: 138, width: 120, height: 18)
+        shortcutKeyLabel.frame = NSRect(x: 20, y: 172, width: 120, height: 18)
         contentView.addSubview(shortcutKeyLabel)
 
-        let shortcutKeyPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 132, width: 194, height: 28), pullsDown: false)
+        let shortcutKeyPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 166, width: 194, height: 28), pullsDown: false)
         for key in ShortcutKey.allCases {
             shortcutKeyPopUp.addItem(withTitle: key.displayName)
             shortcutKeyPopUp.lastItem?.representedObject = key.rawValue
@@ -705,10 +764,10 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
         let shortcutActionLabel = NSTextField(labelWithString: "Hot key action")
         shortcutActionLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        shortcutActionLabel.frame = NSRect(x: 20, y: 98, width: 120, height: 18)
+        shortcutActionLabel.frame = NSRect(x: 20, y: 132, width: 120, height: 18)
         contentView.addSubview(shortcutActionLabel)
 
-        let shortcutActionPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 92, width: 194, height: 28), pullsDown: false)
+        let shortcutActionPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 126, width: 194, height: 28), pullsDown: false)
         for action in ShortcutAction.allCases {
             shortcutActionPopUp.addItem(withTitle: action.displayName)
             shortcutActionPopUp.lastItem?.representedObject = action.rawValue
@@ -718,6 +777,12 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         shortcutActionPopUp.action = #selector(shortcutActionChanged(_:))
         settingsShortcutActionPopUp = shortcutActionPopUp
         contentView.addSubview(shortcutActionPopUp)
+
+        let autoRefreshButton = NSButton(checkboxWithTitle: "Auto-refresh when displays change", target: self, action: #selector(autoRefreshChanged(_:)))
+        autoRefreshButton.frame = NSRect(x: 20, y: 86, width: 300, height: 22)
+        autoRefreshButton.state = autoRefreshOnDisplayChange ? .on : .off
+        settingsAutoRefreshButton = autoRefreshButton
+        contentView.addSubview(autoRefreshButton)
 
         let showButton = NSButton(title: "Show", target: self, action: #selector(showBadges))
         showButton.frame = NSRect(x: 20, y: 34, width: 70, height: 32)

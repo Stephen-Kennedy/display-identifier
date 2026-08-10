@@ -143,6 +143,11 @@ The hot key is off by default, so keys like Escape continue to behave normally
 in whatever app you are using. In `Settings...`, you can choose a key and set it
 to toggle badges, hide badges, or quit Display Identifier.
 
+Display Identifier also auto-refreshes badges when macOS reports a display
+change, such as plugging in, unplugging, enabling, or disabling a monitor. This
+is on by default and can be turned off from `Settings...` if needed. The manual
+`Refresh Displays` menu item is still available.
+
 ## Options
 
 ```sh
@@ -200,6 +205,10 @@ swift run display-identify --list
 If `--list` only prints one display, macOS is only exposing one display to the
 app at that moment. Check System Settings > Displays and reconnect Sidecar or
 external monitors.
+
+If a badge ever appears on the wrong screen after a display is disconnected,
+make sure `Settings...` > `Auto-refresh when displays change` is enabled, or use
+the `Refresh Displays` menu item.
 
 ## Build A Double-Clickable App
 
