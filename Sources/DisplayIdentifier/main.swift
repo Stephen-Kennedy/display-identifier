@@ -1,46 +1,180 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.4.0"
+let appVersion = "1.5.0"
 
-enum ShortcutKey: String, CaseIterable {
-    case none
-    case escape
-    case q
-    case commandShiftD
+struct Shortcut: Equatable {
+    let key: String?
+    let keyCode: UInt16?
+    let modifiers: NSEvent.ModifierFlags
 
-    var displayName: String {
-        switch self {
-        case .none:
-            return "Off"
-        case .escape:
-            return "Escape"
-        case .q:
-            return "Q"
-        case .commandShiftD:
-            return "Command-Shift-D"
+    static let none = Shortcut(key: nil, keyCode: nil, modifiers: [])
+    static let escape = Shortcut(key: nil, keyCode: 53, modifiers: [])
+    static let q = Shortcut(key: "q", keyCode: nil, modifiers: [])
+    static let commandShiftD = Shortcut(key: "d", keyCode: nil, modifiers: [.command, .shift])
+
+    init(key: String?, keyCode: UInt16?, modifiers: NSEvent.ModifierFlags) {
+        self.key = key?.lowercased()
+        self.keyCode = keyCode
+        self.modifiers = modifiers.intersection(.deviceIndependentFlagsMask)
+    }
+
+    init?(storedValue: String) {
+        if storedValue == "none" {
+            self = .none
+            return
+        }
+
+        if let legacy = Shortcut.legacyShortcut(for: storedValue) {
+            self = legacy
+            return
+        }
+
+        let parts = storedValue.split(separator: ":").map(String.init)
+        guard parts.count == 3,
+              let rawModifiers = UInt(parts[2]) else {
+            return nil
+        }
+
+        let modifiers = NSEvent.ModifierFlags(rawValue: rawModifiers)
+        switch parts[0] {
+        case "key":
+            guard !parts[1].isEmpty else {
+                return nil
+            }
+            self.init(key: parts[1], keyCode: nil, modifiers: modifiers)
+        case "keycode":
+            guard let keyCode = UInt16(parts[1]) else {
+                return nil
+            }
+            self.init(key: nil, keyCode: keyCode, modifiers: modifiers)
+        default:
+            return nil
         }
     }
 
+    var storedValue: String {
+        if self == .none {
+            return "none"
+        }
+        if let key {
+            return "key:\(key):\(modifiers.rawValue)"
+        }
+        if let keyCode {
+            return "keycode:\(keyCode):\(modifiers.rawValue)"
+        }
+        return "none"
+    }
+
+    var displayName: String {
+        if self == .none {
+            return "Off"
+        }
+
+        let modifierNames: [(NSEvent.ModifierFlags, String)] = [
+            (.control, "Control"),
+            (.option, "Option"),
+            (.shift, "Shift"),
+            (.command, "Command")
+        ]
+        let prefix = modifierNames
+            .filter { modifiers.contains($0.0) }
+            .map(\.1)
+
+        let keyName: String
+        if keyCode == 53 {
+            keyName = "Escape"
+        } else if let key {
+            keyName = key.uppercased()
+        } else {
+            keyName = "Unknown"
+        }
+
+        return (prefix + [keyName]).joined(separator: "-")
+    }
+
     func matches(_ event: NSEvent) -> Bool {
+        guard self != .none else {
+            return false
+        }
+
         let flags = event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .subtracting(.capsLock)
 
-        switch self {
-        case .none:
+        guard flags == modifiers else {
             return false
-        case .escape:
-            return event.keyCode == 53
-        case .q:
-            return event.charactersIgnoringModifiers?.lowercased() == "q"
-                && flags.isEmpty
-        case .commandShiftD:
-            return event.charactersIgnoringModifiers?.lowercased() == "d"
-                && flags.contains(.command)
-                && flags.contains(.shift)
-                && !flags.contains(.option)
-                && !flags.contains(.control)
+        }
+
+        if let keyCode {
+            return event.keyCode == keyCode
+        }
+
+        return event.charactersIgnoringModifiers?.lowercased() == key
+    }
+
+    static func parse(_ value: String) -> Shortcut? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return Shortcut.none
+        }
+
+        if trimmed.lowercased() == "off" || trimmed.lowercased() == "none" {
+            return Shortcut.none
+        }
+
+        let normalized = trimmed
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+        let tokens = normalized
+            .split(separator: "-")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        var modifiers: NSEvent.ModifierFlags = []
+        var parsedKey: String?
+        var parsedKeyCode: UInt16?
+
+        for token in tokens {
+            switch token {
+            case "command", "cmd", "⌘":
+                modifiers.insert(.command)
+            case "control", "ctrl", "ctl", "^":
+                modifiers.insert(.control)
+            case "option", "opt", "alt", "⌥":
+                modifiers.insert(.option)
+            case "shift", "⇧":
+                modifiers.insert(.shift)
+            case "escape", "esc":
+                parsedKeyCode = 53
+            default:
+                guard token.count == 1,
+                      token.rangeOfCharacter(from: .alphanumerics) != nil else {
+                    return nil
+                }
+                parsedKey = token
+            }
+        }
+
+        guard parsedKey != nil || parsedKeyCode != nil else {
+            return nil
+        }
+
+        return Shortcut(key: parsedKey, keyCode: parsedKeyCode, modifiers: modifiers)
+    }
+
+    private static func legacyShortcut(for rawValue: String) -> Shortcut? {
+        switch rawValue {
+        case "none":
+            return Shortcut.none
+        case "escape":
+            return .escape
+        case "q":
+            return .q
+        case "commandShiftD":
+            return .commandShiftD
+        default:
+            return nil
         }
     }
 }
@@ -368,12 +502,13 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private weak var menuOpacitySlider: NSSlider?
     private weak var settingsOpacitySlider: NSSlider?
     private weak var settingsPlacementPopUp: NSPopUpButton?
-    private weak var settingsShortcutKeyPopUp: NSPopUpButton?
+    private weak var settingsShortcutField: NSTextField?
+    private weak var settingsShortcutStatusLabel: NSTextField?
     private weak var settingsShortcutActionPopUp: NSPopUpButton?
     private weak var settingsAutoRefreshButton: NSButton?
     private var opacity: CGFloat
     private var badgePlacement: BadgePlacement
-    private var shortcutKey: ShortcutKey
+    private var shortcut: Shortcut
     private var shortcutAction: ShortcutAction
     private var autoRefreshOnDisplayChange: Bool
     private var overlaysVisible = false
@@ -391,10 +526,10 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             self.badgePlacement = .bottomRight
         }
         if let savedValue = Self.defaults.string(forKey: Self.shortcutKeyDefaultsKey),
-           let savedShortcutKey = ShortcutKey(rawValue: savedValue) {
-            self.shortcutKey = savedShortcutKey
+           let savedShortcut = Shortcut(storedValue: savedValue) {
+            self.shortcut = savedShortcut
         } else {
-            self.shortcutKey = .none
+            self.shortcut = .none
         }
         if let savedValue = Self.defaults.string(forKey: Self.shortcutActionDefaultsKey),
            let savedShortcutAction = ShortcutAction(rawValue: savedValue) {
@@ -591,15 +726,32 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         refreshDisplays()
     }
 
-    @objc private func shortcutKeyChanged(_ sender: NSPopUpButton) {
-        guard let rawValue = sender.selectedItem?.representedObject as? String,
-              let key = ShortcutKey(rawValue: rawValue) else {
+    @objc private func shortcutChanged(_ sender: NSTextField) {
+        saveShortcut(from: sender.stringValue)
+    }
+
+    @objc private func applyShortcutFromSettings() {
+        saveShortcut(from: settingsShortcutField?.stringValue ?? "")
+    }
+
+    @objc private func clearShortcutFromSettings() {
+        shortcut = .none
+        Self.defaults.set(shortcut.storedValue, forKey: Self.shortcutKeyDefaultsKey)
+        settingsShortcutField?.stringValue = shortcut.displayName
+        settingsShortcutStatusLabel?.stringValue = "Hot key is off"
+    }
+
+    private func saveShortcut(from input: String) {
+        guard let parsedShortcut = Shortcut.parse(input) else {
+            settingsShortcutStatusLabel?.stringValue = "Use one key, or modifiers like Control-Q"
+            settingsShortcutField?.stringValue = shortcut.displayName
             return
         }
 
-        shortcutKey = key
-        Self.defaults.set(rawValue, forKey: Self.shortcutKeyDefaultsKey)
-        settingsShortcutKeyPopUp?.selectItem(withTitle: key.displayName)
+        shortcut = parsedShortcut
+        Self.defaults.set(shortcut.storedValue, forKey: Self.shortcutKeyDefaultsKey)
+        settingsShortcutField?.stringValue = shortcut.displayName
+        settingsShortcutStatusLabel?.stringValue = shortcut == .none ? "Hot key is off" : "Saved \(shortcut.displayName)"
     }
 
     @objc private func shortcutActionChanged(_ sender: NSPopUpButton) {
@@ -704,7 +856,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func makeSettingsWindow() -> NSPanel {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 334),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 364),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -713,29 +865,29 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 334))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 364))
 
         let title = NSTextField(labelWithString: "Display Identifier")
         title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        title.frame = NSRect(x: 20, y: 290, width: 260, height: 24)
+        title.frame = NSRect(x: 20, y: 320, width: 260, height: 24)
         contentView.addSubview(title)
 
         let opacityLabel = NSTextField(labelWithString: "Badge opacity")
         opacityLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        opacityLabel.frame = NSRect(x: 20, y: 252, width: 120, height: 18)
+        opacityLabel.frame = NSRect(x: 20, y: 282, width: 120, height: 18)
         contentView.addSubview(opacityLabel)
 
         let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
-        slider.frame = NSRect(x: 146, y: 248, width: 194, height: 24)
+        slider.frame = NSRect(x: 146, y: 278, width: 234, height: 24)
         settingsOpacitySlider = slider
         contentView.addSubview(slider)
 
         let placementLabel = NSTextField(labelWithString: "Badge position")
         placementLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        placementLabel.frame = NSRect(x: 20, y: 212, width: 120, height: 18)
+        placementLabel.frame = NSRect(x: 20, y: 242, width: 120, height: 18)
         contentView.addSubview(placementLabel)
 
-        let placementPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 206, width: 194, height: 28), pullsDown: false)
+        let placementPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 236, width: 234, height: 28), pullsDown: false)
         for placement in BadgePlacement.allCases {
             placementPopUp.addItem(withTitle: placement.displayName)
             placementPopUp.lastItem?.representedObject = placement.rawValue
@@ -748,26 +900,38 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
         let shortcutKeyLabel = NSTextField(labelWithString: "Hot key")
         shortcutKeyLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        shortcutKeyLabel.frame = NSRect(x: 20, y: 172, width: 120, height: 18)
+        shortcutKeyLabel.frame = NSRect(x: 20, y: 202, width: 120, height: 18)
         contentView.addSubview(shortcutKeyLabel)
 
-        let shortcutKeyPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 166, width: 194, height: 28), pullsDown: false)
-        for key in ShortcutKey.allCases {
-            shortcutKeyPopUp.addItem(withTitle: key.displayName)
-            shortcutKeyPopUp.lastItem?.representedObject = key.rawValue
-        }
-        shortcutKeyPopUp.selectItem(withTitle: shortcutKey.displayName)
-        shortcutKeyPopUp.target = self
-        shortcutKeyPopUp.action = #selector(shortcutKeyChanged(_:))
-        settingsShortcutKeyPopUp = shortcutKeyPopUp
-        contentView.addSubview(shortcutKeyPopUp)
+        let shortcutField = NSTextField(string: shortcut.displayName)
+        shortcutField.frame = NSRect(x: 146, y: 198, width: 138, height: 24)
+        shortcutField.placeholderString = "Control-Q"
+        shortcutField.target = self
+        shortcutField.action = #selector(shortcutChanged(_:))
+        settingsShortcutField = shortcutField
+        contentView.addSubview(shortcutField)
+
+        let shortcutApplyButton = NSButton(title: "Set", target: self, action: #selector(applyShortcutFromSettings))
+        shortcutApplyButton.frame = NSRect(x: 292, y: 194, width: 44, height: 32)
+        contentView.addSubview(shortcutApplyButton)
+
+        let shortcutClearButton = NSButton(title: "Off", target: self, action: #selector(clearShortcutFromSettings))
+        shortcutClearButton.frame = NSRect(x: 342, y: 194, width: 38, height: 32)
+        contentView.addSubview(shortcutClearButton)
+
+        let shortcutStatusLabel = NSTextField(labelWithString: shortcut == .none ? "Hot key is off" : "Saved \(shortcut.displayName)")
+        shortcutStatusLabel.font = NSFont.systemFont(ofSize: 10)
+        shortcutStatusLabel.textColor = .secondaryLabelColor
+        shortcutStatusLabel.frame = NSRect(x: 146, y: 178, width: 234, height: 14)
+        settingsShortcutStatusLabel = shortcutStatusLabel
+        contentView.addSubview(shortcutStatusLabel)
 
         let shortcutActionLabel = NSTextField(labelWithString: "Hot key action")
         shortcutActionLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        shortcutActionLabel.frame = NSRect(x: 20, y: 132, width: 120, height: 18)
+        shortcutActionLabel.frame = NSRect(x: 20, y: 146, width: 120, height: 18)
         contentView.addSubview(shortcutActionLabel)
 
-        let shortcutActionPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 126, width: 194, height: 28), pullsDown: false)
+        let shortcutActionPopUp = NSPopUpButton(frame: NSRect(x: 146, y: 140, width: 234, height: 28), pullsDown: false)
         for action in ShortcutAction.allCases {
             shortcutActionPopUp.addItem(withTitle: action.displayName)
             shortcutActionPopUp.lastItem?.representedObject = action.rawValue
@@ -779,7 +943,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         contentView.addSubview(shortcutActionPopUp)
 
         let autoRefreshButton = NSButton(checkboxWithTitle: "Auto-refresh when displays change", target: self, action: #selector(autoRefreshChanged(_:)))
-        autoRefreshButton.frame = NSRect(x: 20, y: 86, width: 300, height: 22)
+        autoRefreshButton.frame = NSRect(x: 20, y: 96, width: 340, height: 22)
         autoRefreshButton.state = autoRefreshOnDisplayChange ? .on : .off
         settingsAutoRefreshButton = autoRefreshButton
         contentView.addSubview(autoRefreshButton)
@@ -860,7 +1024,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func installKeyMonitor() {
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            guard self.shortcutKey.matches(event) else {
+            guard self.shortcut.matches(event) else {
                 return
             }
 

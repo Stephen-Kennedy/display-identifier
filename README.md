@@ -134,14 +134,17 @@ bar. It includes:
 - `Refresh Displays`
 - opacity slider
 - badge position selector in `Settings...`
-- hot key selector and hot key action selector in `Settings...`
+- custom hot key field and hot key action selector in `Settings...`
 - `Quit`
 
 The Settings window comes forward over other apps when opened from the menu.
 The badges themselves stay passive and click-through so they do not steal focus.
 The hot key is off by default, so keys like Escape continue to behave normally
-in whatever app you are using. In `Settings...`, you can choose a key and set it
-to toggle badges, hide badges, or quit Display Identifier.
+in whatever app you are using. In `Settings...`, you can enter a single key such
+as `Q`, or a modifier combination such as `Control-Q`, `Option-Q`, or
+`Command-Shift-D`, and set it to toggle badges, hide badges, or quit Display
+Identifier. Avoid macOS-reserved shortcuts like `Command-Q`; Display Identifier
+can notice them, but the frontmost app may still receive them too.
 
 Display Identifier also auto-refreshes badges when macOS reports a display
 change, such as plugging in, unplugging, enabling, or disabling a monitor. This
