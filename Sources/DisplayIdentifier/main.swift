@@ -1,12 +1,12 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.1.0"
+let appVersion = "1.2.0"
 
 struct Options {
     var duration: TimeInterval = 60
     var persistent = false
-    var sortByGeometry = false
+    var sortByGeometry = true
     var centerOverlay = false
     var listDisplays = false
     var opacity: CGFloat = 0.30
@@ -24,6 +24,8 @@ struct Options {
                 options.listDisplays = true
             case "--sort-geometry":
                 options.sortByGeometry = true
+            case "--macos-order", "--system-order":
+                options.sortByGeometry = false
             case "--center":
                 options.centerOverlay = true
             case "--opacity", "--alpha":
@@ -55,7 +57,9 @@ struct Options {
                       --opacity <0.08-0.90>  Badge background opacity. Default: 0.30
                       --alpha <0.08-0.90>    Alias for --opacity
                       --list                 Print detected displays and exit
-                      --sort-geometry        Number screens left-to-right, then top-to-bottom
+                      --sort-geometry        Number screens by physical position. Default behavior
+                      --macos-order          Number screens in the order macOS reports them
+                      --system-order         Alias for --macos-order
                       --center               Use the original large centered overlay
                       --version              Print version and exit
                   -h, --help                 Show this help

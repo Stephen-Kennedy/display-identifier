@@ -108,6 +108,7 @@ swift run display-identify --persist
 swift run display-identify --persist --opacity 0.20
 swift run display-identify --list
 swift run display-identify --sort-geometry
+swift run display-identify --macos-order
 swift run display-identify --center
 swift run display-identify --version
 ```
@@ -120,13 +121,17 @@ Options:
 - `--opacity <0.08-0.90>`: badge background opacity. Lower is more transparent.
 - `--alpha <0.08-0.90>`: alias for `--opacity`.
 - `--list`: print detected displays and exit.
-- `--sort-geometry`: number screens left-to-right, then top-to-bottom.
+- `--sort-geometry`: number screens left-to-right, then top-to-bottom. This is
+  the default.
+- `--macos-order`: number screens in the order macOS reports them.
+- `--system-order`: alias for `--macos-order`.
 - `--center`: use the original large centered overlay style.
 - `--version`: print the app version and exit.
 
-Default numbering follows `NSScreen.screens`, which is the order macOS reports
-to apps. Position labels such as `LEFT`, `CENTER`, and `RIGHT` are based on each
-screen's geometry relative to the main display.
+Default numbering follows physical screen position: left-to-right, then
+top-to-bottom. Position labels such as `LEFT`, `CENTER`, and `RIGHT` are based
+on each screen's geometry relative to the main display. Use `--macos-order` when
+you want to see the order AppKit reports through `NSScreen.screens`.
 
 ## Troubleshooting
 
