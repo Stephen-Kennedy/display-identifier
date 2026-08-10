@@ -1,7 +1,42 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.2.0"
+let appVersion = "1.3.0"
+
+enum BadgePlacement: String, CaseIterable {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+
+    init?(argument: String) {
+        switch argument.lowercased() {
+        case "top-left", "topleft":
+            self = .topLeft
+        case "top-right", "topright":
+            self = .topRight
+        case "bottom-left", "bottomleft":
+            self = .bottomLeft
+        case "bottom-right", "bottomright":
+            self = .bottomRight
+        default:
+            return nil
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .topLeft:
+            return "Top Left"
+        case .topRight:
+            return "Top Right"
+        case .bottomLeft:
+            return "Bottom Left"
+        case .bottomRight:
+            return "Bottom Right"
+        }
+    }
+}
 
 struct Options {
     var duration: TimeInterval = 60
@@ -10,6 +45,7 @@ struct Options {
     var centerOverlay = false
     var listDisplays = false
     var opacity: CGFloat = 0.30
+    var badgePlacementOverride: BadgePlacement?
 
     static func parse(_ arguments: [String]) -> Options {
         var options = Options()
@@ -28,6 +64,12 @@ struct Options {
                 options.sortByGeometry = false
             case "--center":
                 options.centerOverlay = true
+            case "--position", "--badge-position", "--location":
+                if index + 1 < arguments.count,
+                   let placement = BadgePlacement(argument: arguments[index + 1]) {
+                    options.badgePlacementOverride = placement
+                    index += 1
+                }
             case "--opacity", "--alpha":
                 if index + 1 < arguments.count,
                    let opacity = Double(arguments[index + 1]) {
@@ -60,6 +102,7 @@ struct Options {
                       --sort-geometry        Number screens by physical position. Default behavior
                       --macos-order          Number screens in the order macOS reports them
                       --system-order         Alias for --macos-order
+                      --position <location>  Badge position: top-left, top-right, bottom-left, bottom-right
                       --center               Use the original large centered overlay
                       --version              Print version and exit
                   -h, --help                 Show this help
@@ -260,6 +303,9 @@ final class OverlayView: NSView {
 
 @MainActor
 final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
+    private static let badgePlacementDefaultsKey = "BadgePlacement"
+    private static let defaults = UserDefaults(suiteName: "local.accord.display-identifier") ?? .standard
+
     private let options: Options
     private var windows: [NSWindow] = []
     private var globalMonitor: Any?
@@ -267,11 +313,21 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSPanel?
     private weak var menuOpacitySlider: NSSlider?
     private weak var settingsOpacitySlider: NSSlider?
+    private weak var settingsPlacementPopUp: NSPopUpButton?
     private var opacity: CGFloat
+    private var badgePlacement: BadgePlacement
 
     init(options: Options) {
         self.options = options
         self.opacity = options.opacity
+        if let placement = options.badgePlacementOverride {
+            self.badgePlacement = placement
+        } else if let savedValue = Self.defaults.string(forKey: Self.badgePlacementDefaultsKey),
+                  let savedPlacement = BadgePlacement(rawValue: savedValue) {
+            self.badgePlacement = savedPlacement
+        } else {
+            self.badgePlacement = .bottomRight
+        }
         super.init()
     }
 
@@ -362,12 +418,19 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         let margin: CGFloat = 24
         let frame = screen.visibleFrame
 
-        return NSRect(
-            x: frame.minX + margin,
-            y: frame.maxY - badgeSize.height - margin,
-            width: badgeSize.width,
-            height: badgeSize.height
-        )
+        let origin: NSPoint
+        switch badgePlacement {
+        case .topLeft:
+            origin = NSPoint(x: frame.minX + margin, y: frame.maxY - badgeSize.height - margin)
+        case .topRight:
+            origin = NSPoint(x: frame.maxX - badgeSize.width - margin, y: frame.maxY - badgeSize.height - margin)
+        case .bottomLeft:
+            origin = NSPoint(x: frame.minX + margin, y: frame.minY + margin)
+        case .bottomRight:
+            origin = NSPoint(x: frame.maxX - badgeSize.width - margin, y: frame.minY + margin)
+        }
+
+        return NSRect(origin: origin, size: badgeSize)
     }
 
     private func installStatusMenu() {
@@ -433,6 +496,18 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func badgePlacementChanged(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let placement = BadgePlacement(rawValue: rawValue) else {
+            return
+        }
+
+        badgePlacement = placement
+        Self.defaults.set(rawValue, forKey: Self.badgePlacementDefaultsKey)
+        settingsPlacementPopUp?.selectItem(withTitle: placement.displayName)
+        refreshDisplays()
+    }
+
     @objc private func showSettings() {
         let window = settingsWindow ?? makeSettingsWindow()
         settingsWindow = window
@@ -471,7 +546,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func makeSettingsWindow() -> NSPanel {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 170),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 220),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -480,22 +555,38 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 170))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 220))
 
         let title = NSTextField(labelWithString: "Display Identifier")
         title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        title.frame = NSRect(x: 20, y: 126, width: 240, height: 24)
+        title.frame = NSRect(x: 20, y: 176, width: 260, height: 24)
         contentView.addSubview(title)
 
         let opacityLabel = NSTextField(labelWithString: "Badge opacity")
         opacityLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        opacityLabel.frame = NSRect(x: 20, y: 92, width: 120, height: 18)
+        opacityLabel.frame = NSRect(x: 20, y: 138, width: 120, height: 18)
         contentView.addSubview(opacityLabel)
 
         let slider = NSSlider(value: Double(opacity), minValue: 0.08, maxValue: 0.90, target: self, action: #selector(opacityChanged(_:)))
-        slider.frame = NSRect(x: 116, y: 88, width: 184, height: 24)
+        slider.frame = NSRect(x: 126, y: 134, width: 194, height: 24)
         settingsOpacitySlider = slider
         contentView.addSubview(slider)
+
+        let placementLabel = NSTextField(labelWithString: "Badge position")
+        placementLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        placementLabel.frame = NSRect(x: 20, y: 98, width: 120, height: 18)
+        contentView.addSubview(placementLabel)
+
+        let placementPopUp = NSPopUpButton(frame: NSRect(x: 126, y: 92, width: 194, height: 28), pullsDown: false)
+        for placement in BadgePlacement.allCases {
+            placementPopUp.addItem(withTitle: placement.displayName)
+            placementPopUp.lastItem?.representedObject = placement.rawValue
+        }
+        placementPopUp.selectItem(withTitle: badgePlacement.displayName)
+        placementPopUp.target = self
+        placementPopUp.action = #selector(badgePlacementChanged(_:))
+        settingsPlacementPopUp = placementPopUp
+        contentView.addSubview(placementPopUp)
 
         let showButton = NSButton(title: "Show", target: self, action: #selector(showBadges))
         showButton.frame = NSRect(x: 20, y: 34, width: 70, height: 32)
@@ -510,7 +601,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         contentView.addSubview(refreshButton)
 
         let quitButton = NSButton(title: "Quit", target: self, action: #selector(quitFromMenu))
-        quitButton.frame = NSRect(x: 260, y: 34, width: 46, height: 32)
+        quitButton.frame = NSRect(x: 264, y: 34, width: 56, height: 32)
         contentView.addSubview(quitButton)
 
         window.contentView = contentView

@@ -15,6 +15,9 @@ Badges can show labels like:
 3 LEFT
 ```
 
+Badge placement defaults to the bottom-right corner of each display. You can
+change the preferred corner from the `Displays` menu bar item's Settings window.
+
 ## Requirements
 
 - macOS 13 or later
@@ -93,7 +96,7 @@ repo is cloned to `~/Developer/display-identifier`.
 Start:
 
 ```sh
-cd "$HOME/Developer/display-identifier" && scripts/launch-persistent.sh --opacity 0.20
+cd "$HOME/Developer/display-identifier" && scripts/launch-persistent.sh --opacity 0.20 --position bottom-right
 ```
 
 Stop:
@@ -105,7 +108,7 @@ cd "$HOME/Developer/display-identifier" && scripts/stop.sh
 Restart:
 
 ```sh
-cd "$HOME/Developer/display-identifier" && scripts/restart.sh --opacity 0.20
+cd "$HOME/Developer/display-identifier" && scripts/restart.sh --opacity 0.20 --position bottom-right
 ```
 
 Open installed app:
@@ -130,6 +133,7 @@ bar. It includes:
 - `Hide Badges`
 - `Refresh Displays`
 - opacity slider
+- badge position selector in `Settings...`
 - `Quit`
 
 The Settings window comes forward over other apps when opened from the menu.
@@ -141,6 +145,7 @@ The badges themselves stay passive and click-through so they do not steal focus.
 swift run display-identify --duration 20
 swift run display-identify --persist
 swift run display-identify --persist --opacity 0.20
+swift run display-identify --persist --position bottom-right
 swift run display-identify --list
 swift run display-identify --sort-geometry
 swift run display-identify --macos-order
@@ -155,6 +160,11 @@ Options:
 - `--persistent`: alias for `--persist`.
 - `--opacity <0.08-0.90>`: badge background opacity. Lower is more transparent.
 - `--alpha <0.08-0.90>`: alias for `--opacity`.
+- `--position <location>`: place badges at `top-left`, `top-right`,
+  `bottom-left`, or `bottom-right`. Default is `bottom-right`; the Settings
+  window saves your preferred location.
+- `--badge-position <location>`: alias for `--position`.
+- `--location <location>`: alias for `--position`.
 - `--list`: print detected displays and exit.
 - `--sort-geometry`: number screens left-to-right, then top-to-bottom. This is
   the default.
