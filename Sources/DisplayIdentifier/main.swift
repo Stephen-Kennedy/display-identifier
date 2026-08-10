@@ -34,7 +34,7 @@ struct Options {
                 print("""
                 display-identify
 
-                Shows a numbered badge on every connected macOS display.
+                Shows a numbered position badge on every connected macOS display.
 
                 Options:
                   -d, --duration <seconds>   Auto-close after this many seconds. Default: 60
@@ -71,14 +71,16 @@ final class OverlayView: NSView {
     private let number: Int
     private let title: String
     private let details: String
+    private let position: String
     private let accentColor: NSColor
     private let isBadge: Bool
     var closeHandler: (() -> Void)?
 
-    init(frame: NSRect, number: Int, title: String, details: String, accentColor: NSColor, isBadge: Bool) {
+    init(frame: NSRect, number: Int, title: String, details: String, position: String, accentColor: NSColor, isBadge: Bool) {
         self.number = number
         self.title = title
         self.details = details
+        self.position = position
         self.accentColor = accentColor
         self.isBadge = isBadge
         super.init(frame: frame)
@@ -118,34 +120,54 @@ final class OverlayView: NSView {
 
     private func drawBadge() {
         let panelRect = bounds.insetBy(dx: 4, dy: 4)
-        let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 18, yRadius: 18)
-        NSColor.black.withAlphaComponent(0.44).setFill()
+        let panelPath = NSBezierPath(roundedRect: panelRect, xRadius: 14, yRadius: 14)
+        NSColor.black.withAlphaComponent(0.30).setFill()
         panelPath.fill()
 
-        accentColor.withAlphaComponent(0.68).setStroke()
-        panelPath.lineWidth = 4
+        accentColor.withAlphaComponent(0.52).setStroke()
+        panelPath.lineWidth = 3
         panelPath.stroke()
 
         let numberAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 52, weight: .black),
+            .font: NSFont.systemFont(ofSize: 46, weight: .black),
             .foregroundColor: NSColor.white
         ]
         let numberString = "\(number)" as NSString
         let numberSize = numberString.size(withAttributes: numberAttributes)
         numberString.draw(
-            at: NSPoint(x: bounds.midX - numberSize.width / 2, y: bounds.midY - numberSize.height * 0.34),
+            at: NSPoint(x: 18, y: bounds.midY - numberSize.height * 0.32),
             withAttributes: numberAttributes
+        )
+
+        let positionAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 17, weight: .bold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.86)
+        ]
+        let positionString = position as NSString
+        positionString.draw(
+            at: NSPoint(x: 68, y: bounds.midY + 8),
+            withAttributes: positionAttributes
         )
 
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.68)
+            .foregroundColor: NSColor.white.withAlphaComponent(0.72)
         ]
-        let titleString = compactTitle(title) as NSString
-        let titleSize = titleString.size(withAttributes: titleAttributes)
+        let titleString = compactTitle(title, maxLength: 19) as NSString
         titleString.draw(
-            at: NSPoint(x: bounds.midX - titleSize.width / 2, y: 14),
+            at: NSPoint(x: 68, y: bounds.midY - 14),
             withAttributes: titleAttributes
+        )
+
+        let detailAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.58)
+        ]
+        let detailString = compactTitle(details, maxLength: 28) as NSString
+        let detailSize = detailString.size(withAttributes: detailAttributes)
+        detailString.draw(
+            at: NSPoint(x: panelRect.midX - detailSize.width / 2, y: 13),
+            withAttributes: detailAttributes
         )
     }
 
@@ -167,16 +189,15 @@ final class OverlayView: NSView {
         panelPath.lineWidth = 8
         panelPath.stroke()
 
-        let numberFontSize = max(96, min(panelHeight * 0.55, panelWidth * 0.38))
-        let numberAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: numberFontSize, weight: .black),
+        let headingAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 44, weight: .black),
             .foregroundColor: NSColor.white
         ]
-        let numberString = "\(number)" as NSString
-        let numberSize = numberString.size(withAttributes: numberAttributes)
-        numberString.draw(
-            at: NSPoint(x: bounds.midX - numberSize.width / 2, y: panelRect.midY - numberSize.height * 0.42),
-            withAttributes: numberAttributes
+        let headingString = "\(number) \(position)" as NSString
+        let headingSize = headingString.size(withAttributes: headingAttributes)
+        headingString.draw(
+            at: NSPoint(x: bounds.midX - headingSize.width / 2, y: panelRect.midY + 34),
+            withAttributes: headingAttributes
         )
 
         let titleAttributes: [NSAttributedString.Key: Any] = [
@@ -202,12 +223,12 @@ final class OverlayView: NSView {
         )
     }
 
-    private func compactTitle(_ value: String) -> String {
-        if value.count <= 15 {
+    private func compactTitle(_ value: String, maxLength: Int = 15) -> String {
+        if value.count <= maxLength {
             return value
         }
 
-        let prefix = value.prefix(12)
+        let prefix = value.prefix(max(1, maxLength - 3))
         return "\(prefix)..."
     }
 }
@@ -253,10 +274,12 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
 
     private func showOverlays() {
         let screens = orderedScreens()
+        let mainScreen = NSScreen.main ?? screens.first
 
         for (index, screen) in screens.enumerated() {
             let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             let name = screen.localizedName
+            let position = positionLabel(for: screen, relativeTo: mainScreen)
             let details = [
                 "id \(displayID.map(String.init) ?? "unknown")",
                 "\(Int(screen.frame.width))x\(Int(screen.frame.height))",
@@ -289,6 +312,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
                 number: index + 1,
                 title: name,
                 details: details,
+                position: position,
                 accentColor: accentColor(for: index),
                 isBadge: !options.centerOverlay
             )
@@ -301,7 +325,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
     }
 
     private func badgeRect(for screen: NSScreen) -> NSRect {
-        let badgeSize = NSSize(width: 128, height: 104)
+        let badgeSize = NSSize(width: 188, height: 104)
         let margin: CGFloat = 24
         let frame = screen.visibleFrame
 
@@ -326,8 +350,29 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func positionLabel(for screen: NSScreen, relativeTo mainScreen: NSScreen?) -> String {
+        guard let mainScreen else {
+            return "UNKNOWN"
+        }
+
+        if screen == mainScreen {
+            return "CENTER"
+        }
+
+        let dx = screen.frame.midX - mainScreen.frame.midX
+        let dy = screen.frame.midY - mainScreen.frame.midY
+        let horizontal = abs(dx) >= abs(dy)
+
+        if horizontal {
+            return dx < 0 ? "LEFT" : "RIGHT"
+        }
+
+        return dy < 0 ? "BELOW" : "ABOVE"
+    }
+
     private func printDisplayList() {
         let screens = orderedScreens()
+        let mainScreen = NSScreen.main ?? screens.first
         print("Detected \(screens.count) display\(screens.count == 1 ? "" : "s")")
 
         for (index, screen) in screens.enumerated() {
@@ -335,9 +380,10 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             let frame = screen.frame
             let visibleFrame = screen.visibleFrame
             let mainMarker = screen == NSScreen.main ? " main" : ""
+            let position = positionLabel(for: screen, relativeTo: mainScreen)
 
             print("""
-            \(index + 1). \(screen.localizedName)\(mainMarker)
+            \(index + 1). \(position) - \(screen.localizedName)\(mainMarker)
                id: \(displayID.map(String.init) ?? "unknown")
                frame: x=\(Int(frame.minX)) y=\(Int(frame.minY)) w=\(Int(frame.width)) h=\(Int(frame.height))
                visible: x=\(Int(visibleFrame.minX)) y=\(Int(visibleFrame.minY)) w=\(Int(visibleFrame.width)) h=\(Int(visibleFrame.height))
