@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-let appVersion = "1.5.0"
+let appVersion = "1.6.0"
 
 struct Shortcut: Equatable {
     let key: String?
@@ -584,7 +584,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         for (index, screen) in screens.enumerated() {
             let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             let name = screen.localizedName
-            let position = positionLabel(for: screen, relativeTo: mainScreen)
+            let position = positionLabel(for: screen, relativeTo: mainScreen, among: screens)
             let details = [
                 "id \(displayID.map(String.init) ?? "unknown")",
                 "\(Int(screen.frame.width))x\(Int(screen.frame.height))",
@@ -981,13 +981,15 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func positionLabel(for screen: NSScreen, relativeTo mainScreen: NSScreen?) -> String {
+    private func positionLabel(for screen: NSScreen, relativeTo mainScreen: NSScreen?, among screens: [NSScreen]) -> String {
         guard let mainScreen else {
             return "UNKNOWN"
         }
 
         if screen == mainScreen {
-            return "CENTER"
+            let hasScreenOnLeft = screens.contains { $0 != mainScreen && $0.frame.midX < mainScreen.frame.midX }
+            let hasScreenOnRight = screens.contains { $0 != mainScreen && $0.frame.midX > mainScreen.frame.midX }
+            return hasScreenOnLeft && hasScreenOnRight ? "CENTER" : "MAIN"
         }
 
         let dx = screen.frame.midX - mainScreen.frame.midX
@@ -1011,7 +1013,7 @@ final class DisplayIdentifierApp: NSObject, NSApplicationDelegate {
             let frame = screen.frame
             let visibleFrame = screen.visibleFrame
             let mainMarker = screen == NSScreen.main ? " main" : ""
-            let position = positionLabel(for: screen, relativeTo: mainScreen)
+            let position = positionLabel(for: screen, relativeTo: mainScreen, among: screens)
 
             print("""
             \(index + 1). \(position) - \(screen.localizedName)\(mainMarker)

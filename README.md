@@ -10,7 +10,7 @@ treating as `1`, `2`, `3`, and where each screen sits physically.
 Badges can show labels like:
 
 ```text
-1 CENTER
+1 MAIN
 2 RIGHT
 3 LEFT
 ```
@@ -186,8 +186,10 @@ Options:
 - `--version`: print the app version and exit.
 
 Default numbering follows physical screen position: left-to-right, then
-top-to-bottom. Position labels such as `LEFT`, `CENTER`, and `RIGHT` are based
-on each screen's geometry relative to the main display. Use `--macos-order` when
+top-to-bottom. Position labels such as `LEFT`, `MAIN`, `CENTER`, and `RIGHT`
+are based on each screen's geometry relative to the main display. The main
+display is labeled `MAIN` for one- and two-display layouts; it is labeled
+`CENTER` only when there are displays on both sides. Use `--macos-order` when
 you want to see the order AppKit reports through `NSScreen.screens`.
 
 ## Troubleshooting
